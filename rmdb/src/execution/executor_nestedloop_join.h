@@ -9,6 +9,8 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #pragma once
+#include <algorithm>
+
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
@@ -17,6 +19,9 @@ See the Mulan PSL v2 for more details. */
 
 class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
+    static constexpr size_t JOIN_BUFFER_BYTES = 8 * 1024 * 1024;
+    static constexpr size_t JOIN_BUFFER_MAX_RECORDS = 65536;
+
     std::unique_ptr<AbstractExecutor> left_;    // 左儿子节点（需要join的表）
     std::unique_ptr<AbstractExecutor> right_;   // 右儿子节点（需要join的表）
     size_t len_;                                // join后获得的每条记录的长度
@@ -24,31 +29,89 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
 
     std::vector<Condition> fed_conds_;          // join条件
     bool isend;
-    std::unique_ptr<RmRecord> left_rec_;
+    std::vector<std::unique_ptr<RmRecord>> left_block_;
+    size_t left_block_pos_;
     std::unique_ptr<RmRecord> right_rec_;
 
-    bool advance_to_match() {
-        while (!left_->is_end()) {
-            if (left_rec_ == nullptr) {
-                left_rec_ = left_->Next();
-            }
-            for (; !right_->is_end(); right_->nextTuple()) {
-                right_rec_ = right_->Next();
-                auto joined = std::make_unique<RmRecord>(len_);
-                memcpy(joined->data, left_rec_->data, left_->tupleLen());
-                memcpy(joined->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
-                if (eval_conds_on_record(cols_, joined.get(), fed_conds_)) {
-                    return true;
-                }
+    bool load_left_block() {
+        left_block_.clear();
+        left_block_pos_ = 0;
+
+        size_t max_records = JOIN_BUFFER_BYTES / std::max<size_t>(left_->tupleLen(), 1);
+        max_records = std::max<size_t>(1, std::min(max_records, JOIN_BUFFER_MAX_RECORDS));
+        while (!left_->is_end() && left_block_.size() < max_records) {
+            auto rec = left_->Next();
+            if (rec != nullptr) {
+                left_block_.push_back(std::move(rec));
             }
             left_->nextTuple();
-            if (left_->is_end()) {
-                break;
-            }
-            left_rec_ = left_->Next();
-            right_->beginTuple();
         }
-        return false;
+        return !left_block_.empty();
+    }
+
+    void restart_right_scan() {
+        right_->beginTuple();
+        right_rec_.reset();
+        left_block_pos_ = 0;
+    }
+
+    bool advance_to_match() {
+        while (true) {
+            if (left_block_.empty()) {
+                if (!load_left_block()) {
+                    return false;
+                }
+                restart_right_scan();
+            }
+
+            while (!right_->is_end()) {
+                if (right_rec_ == nullptr) {
+                    right_rec_ = right_->Next();
+                }
+
+                for (; left_block_pos_ < left_block_.size(); ++left_block_pos_) {
+                    auto &left_rec = left_block_[left_block_pos_];
+                    if (left_rec == nullptr || right_rec_ == nullptr) {
+                        continue;
+                    }
+                    auto joined = std::make_unique<RmRecord>(len_);
+                    memcpy(joined->data, left_rec->data, left_->tupleLen());
+                    memcpy(joined->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
+                    if (eval_conds_on_record(cols_, joined.get(), fed_conds_)) {
+                        return true;
+                    }
+                }
+
+                right_->nextTuple();
+                right_rec_.reset();
+                left_block_pos_ = 0;
+            }
+
+            if (!load_left_block()) {
+                return false;
+            }
+            restart_right_scan();
+            if (right_->is_end()) {
+                return false;
+            }
+        }
+    }
+
+    std::unique_ptr<RmRecord> make_joined_record() const {
+        if (left_block_pos_ >= left_block_.size() || left_block_[left_block_pos_] == nullptr || right_rec_ == nullptr) {
+            return nullptr;
+        }
+        auto joined = std::make_unique<RmRecord>(len_);
+        memcpy(joined->data, left_block_[left_block_pos_]->data, left_->tupleLen());
+        memcpy(joined->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
+        return joined;
+    }
+
+    bool advance_from_current() {
+        if (left_block_pos_ < left_block_.size()) {
+            ++left_block_pos_;
+        }
+        return advance_to_match();
     }
 
    public:
@@ -65,14 +128,15 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
 
         cols_.insert(cols_.end(), right_cols.begin(), right_cols.end());
         isend = false;
+        left_block_pos_ = 0;
         fed_conds_ = std::move(conds);
 
     }
 
     void beginTuple() override {
         left_->beginTuple();
-        right_->beginTuple();
-        left_rec_.reset();
+        left_block_.clear();
+        left_block_pos_ = 0;
         right_rec_.reset();
         isend = !advance_to_match();
     }
@@ -81,18 +145,14 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         if (isend) {
             return;
         }
-        right_->nextTuple();
-        isend = !advance_to_match();
+        isend = !advance_from_current();
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        if (isend || left_rec_ == nullptr || right_rec_ == nullptr) {
+        if (isend) {
             return nullptr;
         }
-        auto rec = std::make_unique<RmRecord>(len_);
-        memcpy(rec->data, left_rec_->data, left_->tupleLen());
-        memcpy(rec->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
-        return rec;
+        return make_joined_record();
     }
 
     Rid &rid() override { return _abstract_rid; }

@@ -1,0 +1,59 @@
+# OS / editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*~origin_master
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# CMake / build outputs
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+CTestTestfile.cmake
+cmake_install.cmake
+Makefile
+compile_commands.json
+Testing/
+
+# RMDB build outputs
+rmdb/build/
+rmdb/rmdb_client/build/
+rmdb/bin/
+rmdb/lib/
+rmdb/cmake-build-*/
+
+# Generated binaries and libraries
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Runtime database folders and logs produced by tests/manual runs
+rmdb/*_db/
+rmdb/*testdb/
+rmdb/testdb/
+rmdb/BufferPoolManagerTest_db/
+rmdb/db.log
+rmdb/output.txt
+
+# Temporary archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+
+# Large reference documents are kept locally; use Markdown docs in git.
+*.pdf
+
+# Local notes that should not be committed unless explicitly added
+*.local
+*.bak

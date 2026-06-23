@@ -1,3 +1,5 @@
+> 课程实践实现说明请优先阅读仓库根目录 [README.md](../README.md) 和 [实践实现记录.md](../实践实现记录.md)。本文保留 RMDB 原框架介绍与参考资料。
+
 <div align="center">
 <img src="RMDB.jpg"  width=25%  /> 
 </div>
