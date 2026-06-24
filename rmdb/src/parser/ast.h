@@ -40,6 +40,11 @@ enum AggFunc {
     AGG_FUNC_COUNT
 };
 
+struct ParsedInt {
+    int64_t value = 0;
+    bool overflow = false;
+};
+
 // Base class for tree nodes
 struct TreeNode {
     virtual ~TreeNode() = default;  // enable polymorphism
@@ -131,8 +136,9 @@ struct Value : public Expr {
 
 struct IntLit : public Value {
     int64_t val;
+    bool overflow;
 
-    IntLit(int64_t val_) : val(val_) {}
+    IntLit(int64_t val_, bool overflow_ = false) : val(val_), overflow(overflow_) {}
 };
 
 struct FloatLit : public Value {
@@ -281,6 +287,7 @@ struct SelectStmt : public TreeNode {
 struct SemValue {
     int sv_int;
     int64_t sv_bigint;
+    ParsedInt sv_int_lit;
     float sv_float;
     std::string sv_str;
     OrderByDir sv_orderby_dir;

@@ -27,6 +27,7 @@ bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_c
     TabMeta& tab = sm_manager_->db_.get_table(tab_name);
     size_t best_prefix = 0;
     std::vector<std::string> best_cols;
+    std::vector<std::string> best_range_cols;
     for (auto &index : tab.indexes) {
         size_t prefix = 0;
         for (auto &idx_col : index.cols) {
@@ -50,9 +51,22 @@ bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_c
                 best_cols.push_back(col.name);
             }
         }
+        if (best_range_cols.empty() && index.col_num == 1) {
+            for (auto &cond : curr_conds) {
+                if (cond.is_rhs_val && cond.op != OP_NE && cond.lhs_col.tab_name == tab_name &&
+                    cond.lhs_col.col_name == index.cols[0].name) {
+                    best_range_cols.push_back(index.cols[0].name);
+                    break;
+                }
+            }
+        }
     }
     if (best_prefix > 0) {
         index_col_names = std::move(best_cols);
+        return true;
+    }
+    if (!best_range_cols.empty()) {
+        index_col_names = std::move(best_range_cols);
         return true;
     }
     return false;

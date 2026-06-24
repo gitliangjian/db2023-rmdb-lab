@@ -29,7 +29,7 @@ SUM MAX MIN COUNT AS LIMIT
 
 // type-specific tokens
 %token <sv_str> IDENTIFIER VALUE_STRING
-%token <sv_bigint> VALUE_INT
+%token <sv_int_lit> VALUE_INT
 %token <sv_float> VALUE_FLOAT
 
 // specify types for non-terminal symbol
@@ -195,7 +195,7 @@ type:
     }
     |   CHAR '(' VALUE_INT ')'
     {
-        $$ = std::make_shared<TypeLen>(SV_TYPE_STRING, $3);
+        $$ = std::make_shared<TypeLen>(SV_TYPE_STRING, static_cast<int>($3.value));
     }
     |   FLOAT
     {
@@ -225,7 +225,7 @@ valueList:
 value:
         VALUE_INT
     {
-        $$ = std::make_shared<IntLit>($1);
+        $$ = std::make_shared<IntLit>($1.value, $1.overflow);
     }
     |   VALUE_FLOAT
     {
@@ -441,7 +441,7 @@ opt_asc_desc:
     ;    
 
 opt_limit:
-        LIMIT VALUE_INT { $$ = static_cast<int>($2); }
+        LIMIT VALUE_INT { $$ = static_cast<int>($2.value); }
     |       { $$ = -1; }
     ;
 

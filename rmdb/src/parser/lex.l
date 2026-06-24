@@ -13,6 +13,7 @@
 %{
 #include "ast.h"
 #include "yacc.tab.h"
+#include <cerrno>
 #include <cstdlib>
 #include <iostream>
 
@@ -106,7 +107,11 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 }
     /* literals */
 {value_int} {
-    yylval->sv_bigint = atoll(yytext);
+    errno = 0;
+    char *end = nullptr;
+    long long parsed = strtoll(yytext, &end, 10);
+    yylval->sv_int_lit.value = static_cast<int64_t>(parsed);
+    yylval->sv_int_lit.overflow = (errno == ERANGE || end == yytext || *end != '\0');
     return VALUE_INT;
 }
 {value_float} {

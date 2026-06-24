@@ -179,6 +179,40 @@ void *client_handler(void *sock_fd) {
                     outfile.open("output.txt",std::ios::out | std::ios::app);
                     outfile << "failure\n";
                     outfile.close();
+                } catch (std::exception &e) {
+                    std::cerr << e.what() << std::endl;
+
+                    std::string str = "failure\n";
+                    memcpy(data_send, str.c_str(), str.length());
+                    data_send[str.length()] = '\0';
+                    offset = str.length();
+
+                    if (context->txn_ != nullptr && context->txn_->get_state() == TransactionState::GROWING) {
+                        txn_manager->abort(context->txn_, log_manager.get());
+                        ResetImplicitTransaction(&txn_id);
+                        context->txn_ = txn_manager->get_transaction(txn_id);
+                    }
+
+                    std::fstream outfile;
+                    outfile.open("output.txt", std::ios::out | std::ios::app);
+                    outfile << str;
+                    outfile.close();
+                } catch (...) {
+                    std::string str = "failure\n";
+                    memcpy(data_send, str.c_str(), str.length());
+                    data_send[str.length()] = '\0';
+                    offset = str.length();
+
+                    if (context->txn_ != nullptr && context->txn_->get_state() == TransactionState::GROWING) {
+                        txn_manager->abort(context->txn_, log_manager.get());
+                        ResetImplicitTransaction(&txn_id);
+                        context->txn_ = txn_manager->get_transaction(txn_id);
+                    }
+
+                    std::fstream outfile;
+                    outfile.open("output.txt", std::ios::out | std::ios::app);
+                    outfile << str;
+                    outfile.close();
                 }
             }
         }
@@ -200,6 +234,10 @@ void *client_handler(void *sock_fd) {
     }
 
     // Clear
+    Transaction *txn = txn_manager->get_transaction(txn_id);
+    if (txn != nullptr && txn->get_state() == TransactionState::GROWING) {
+        txn_manager->abort(txn, log_manager.get());
+    }
     std::cout << "Terminating current client_connection..." << std::endl;
     close(fd);           // close a file descriptor.
     pthread_exit(NULL);  // terminate calling thread!
@@ -284,6 +322,7 @@ int main(int argc, char **argv) {
     }
 
     signal(SIGINT, sigint_handler);
+    signal(SIGPIPE, SIG_IGN);
     try {
         std::cout << "\n"
                      "  _____  __  __ _____  ____  \n"

@@ -91,7 +91,7 @@ class IndexScanExecutor : public AbstractExecutor {
         if (exact) {
             ih->get_value(key.data(), &matched_rids_, context_->txn_);
         } else {
-            scan_ = std::make_unique<RmScan>(fh_);
+            scan_ = std::make_unique<IxScan>(ih, ih->leaf_begin(), ih->leaf_end(), sm_manager_->get_bpm());
             while (!scan_->is_end()) {
                 auto rec = fh_->get_record(scan_->rid(), context_);
                 if (eval_conds_on_record(cols_, rec.get(), fed_conds_)) {

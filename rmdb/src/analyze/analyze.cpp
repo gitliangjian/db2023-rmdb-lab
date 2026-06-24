@@ -225,6 +225,9 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
 Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
     Value val;
     if (auto int_lit = std::dynamic_pointer_cast<ast::IntLit>(sv_val)) {
+        if (int_lit->overflow) {
+            throw RMDBError("Integer literal out of range");
+        }
         if (int_lit->val < INT32_MIN || int_lit->val > INT32_MAX) {
             val.set_bigint(int_lit->val);
         } else {
