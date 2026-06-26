@@ -183,3 +183,26 @@ void BufferPoolManager::flush_all_pages(int fd) {
         }
     }
 }
+
+void BufferPoolManager::remove_all_pages(int fd) {
+    std::scoped_lock lock{latch_};
+    for (auto it = page_table_.begin(); it != page_table_.end();) {
+        if (it->first.fd != fd) {
+            ++it;
+            continue;
+        }
+        frame_id_t frame_id = it->second;
+        Page *page = &pages_[frame_id];
+        if (page->pin_count_ != 0) {
+            ++it;
+            continue;
+        }
+        it = page_table_.erase(it);
+        replacer_->pin(frame_id);
+        page->reset_memory();
+        page->id_ = PageId{.fd = -1, .page_no = INVALID_PAGE_ID};
+        page->pin_count_ = 0;
+        page->is_dirty_ = false;
+        free_list_.push_back(frame_id);
+    }
+}

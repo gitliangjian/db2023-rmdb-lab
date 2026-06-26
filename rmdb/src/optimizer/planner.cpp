@@ -51,11 +51,13 @@ bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_c
                 best_cols.push_back(col.name);
             }
         }
-        if (best_range_cols.empty() && index.col_num == 1) {
+        if (best_range_cols.empty()) {
             for (auto &cond : curr_conds) {
                 if (cond.is_rhs_val && cond.op != OP_NE && cond.lhs_col.tab_name == tab_name &&
                     cond.lhs_col.col_name == index.cols[0].name) {
-                    best_range_cols.push_back(index.cols[0].name);
+                    for (auto &col : index.cols) {
+                        best_range_cols.push_back(col.name);
+                    }
                     break;
                 }
             }
